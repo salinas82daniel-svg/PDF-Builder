@@ -5,31 +5,74 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import SimpleDocTemplate, Table
 from reportlab.lib.pagesizes import letter
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageTk
+from pdf2image import convert_from_path
 
 class PDFEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("PDF Builder")
+        self.root.title("PDF Builder & Viewer")
         self.pdf_path = None
-
-        tk.Button(root, text="Open PDF", command=self.open_pdf, width=20).pack(pady=5)
-        tk.Button(root, text="Add Text", command=self.add_text, width=20).pack(pady=5)
-        tk.Button(root, text="Add Image", command=self.add_image, width=20).pack(pady=5)
-        tk.Button(root, text="Add Table", command=self.add_table, width=20).pack(pady=5)
-        tk.Button(root, text="Save PDF", command=self.save_pdf, width=20).pack(pady=5)
-
         self.pdf_writer = PdfWriter()
-        self.overlay_pages = []  # Store pages to add
+        self.pages = []
+        self.current_page = 0
+
+        # Buttons
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(pady=5)
+        tk.Button(btn_frame, text="Open PDF", command=self.open_pdf, width=15).grid(row=0, column=0, padx=3)
+        tk.Button(btn_frame, text="Add Text", command=self.add_text, width=15).grid(row=0, column=1, padx=3)
+        tk.Button(btn_frame, text="Add Image", command=self.add_image, width=15).grid(row=0, column=2, padx=3)
+        tk.Button(btn_frame, text="Add Table", command=self.add_table, width=15).grid(row=0, column=3, padx=3)
+        tk.Button(btn_frame, text="Save PDF", command=self.save_pdf, width=15).grid(row=0, column=4, padx=3)
+
+        # Canvas for preview
+        self.preview_canvas = tk.Canvas(root, width=600, height=800, bg="#ddd")
+        self.preview_canvas.pack(pady=10)
+
+        # Navigation buttons
+        nav_frame = tk.Frame(root)
+        nav_frame.pack()
+        tk.Button(nav_frame, text="◀ Prev", command=self.prev_page).grid(row=0, column=0, padx=10)
+        tk.Button(nav_frame, text="Next ▶", command=self.next_page).grid(row=0, column=1, padx=10)
 
     def open_pdf(self):
         path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
-        if path:
-            self.pdf_path = path
-            reader = PdfReader(self.pdf_path)
-            for page in reader.pages:
-                self.pdf_writer.add_page(page)
-            messagebox.showinfo("Loaded", f"{len(reader.pages)} pages loaded.")
+        if not path:
+            return
+
+        self.pdf_path = path
+        reader = PdfReader(path)
+        self.pdf_writer = PdfWriter()
+        for page in reader.pages:
+            self.pdf_writer.add_page(page)
+
+        self.load_preview()
+        messagebox.showinfo("Loaded", f"{len(reader.pages)} pages loaded.")
+
+    def load_preview(self):
+        """Render first page as image."""
+        self.pages = convert_from_path(self.pdf_path, dpi=100)
+        self.current_page = 0
+        self.display_page()
+
+    def display_page(self):
+        if not self.pages:
+            return
+        img = self.pages[self.current_page]
+        img.thumbnail((600, 800))
+        self.tk_img = ImageTk.PhotoImage(img)
+        self.preview_canvas.create_image(300, 400, image=self.tk_img)
+
+    def next_page(self):
+        if self.pages and self.current_page < len(self.pages) - 1:
+            self.current_page += 1
+            self.display_page()
+
+    def prev_page(self):
+        if self.pages and self.current_page > 0:
+            self.current_page -= 1
+            self.display_page()
 
     def add_text(self):
         text_window = tk.Toplevel(self.root)
@@ -52,6 +95,7 @@ class PDFEditor:
             new_pdf = PdfReader(packet)
             self.pdf_writer.add_page(new_pdf.pages[0])
             text_window.destroy()
+            messagebox.showinfo("Added", "Text added as new page.")
 
         tk.Button(text_window, text="Add", command=add).pack(pady=5)
 
@@ -90,6 +134,7 @@ class PDFEditor:
             new_pdf = PdfReader(packet)
             self.pdf_writer.add_page(new_pdf.pages[0])
             table_window.destroy()
+            messagebox.showinfo("Added", "Table added as new page.")
 
         tk.Button(table_window, text="Add Table", command=add).pack(pady=5)
 
